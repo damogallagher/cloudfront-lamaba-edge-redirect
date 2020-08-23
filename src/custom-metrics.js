@@ -7,6 +7,7 @@ exports.handler = async (event, context) => {
     console.log(JSON.stringify(event));
 
     //cloudwatch.putMetricData 
+    //https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/lambda-examples.html#lambda-examples-custom-error-static-body
     const response = {
         status: '200',
         status: 'custom metrics ' 
