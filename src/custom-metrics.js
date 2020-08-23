@@ -5,7 +5,8 @@ var cloudwatch = new AWS.CloudWatch();
 exports.handler = async (event, context) => {
     console.log("Custom Metrics Event");
     console.log(JSON.stringify(event));
-
+    const status = event.Records[0].cf.response.status;
+     console.log("status:"+status);
     //cloudwatch.putMetricData 
     //https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/lambda-examples.html#lambda-examples-custom-error-static-body
     const response = {
