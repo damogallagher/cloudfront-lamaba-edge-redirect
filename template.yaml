@@ -12,6 +12,21 @@ Parameters:
     Type: String
     Default: "1"
 
+  CustomMetricsLambdaFunctionVersion:
+    Description: AWS Lambda@Edge to generate custom metrics on a origin response call
+    Type: String
+    Default: "2" 
+
+  MainOrigin:
+    Description: THe value for the main origin
+    Type: String
+    Default: main
+
+  DROrigin:
+    Description: THe value for the dr origin
+    Type: String
+    Default: dr    
+
 Globals:
   Function:
     Runtime: nodejs12.x
@@ -52,27 +67,88 @@ Resources:
       Timeout: 30
       Role: !GetAtt PublishLambdaVersionRole.Arn
 
+  ManagementLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: "A lambda to update the origin to be main or DR"
+      FunctionName: !Sub "management-${Stage}"
+      CodeUri: ./src
+      Handler: management.handler
+      Runtime: nodejs12.x
+      MemorySize: 128
+      Timeout: 30
+      Role: !GetAtt ManagementLambdaIAMRole.Arn
+      Environment:
+        Variables:
+          MAIN_ORIGIN: !Ref MainOrigin
+          DR_ORIGIN: !Ref DROrigin
+
+  CustomMetricsLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: "A lambda@Edge to generate custom metrics on a viewer response"
+      FunctionName: !Sub "custom-metrics-${Stage}"
+      CodeUri: ./src
+      Handler: custom-metrics.handler
+      Runtime: nodejs12.x
+      MemorySize: 128
+      Timeout: 5
+      Role: !GetAtt CustomMetricsLambdaEdgeIAMRole.Arn
+
+  CustomMetricsLambdaVersion:
+    Type: "Custom::LambdaVersion"
+    Properties:
+      ServiceToken: !GetAtt CreateLambdaEdgeVersionFunction.Arn
+      FunctionName: !Ref CustomMetricsLambda
+      LambdaCodeVersion: !Ref "CustomMetricsLambdaFunctionVersion"
+
   CloudFrontDistribution:
     Type: AWS::CloudFront::Distribution
     DependsOn:
       - ModifyOriginLambdaVersion
+      - CustomMetricsLambdaVersion
     Properties:
       DistributionConfig:
         Enabled: true
         Origins:
-          - Id: CloudFrontRedirectOrigin
-            DomainName: "www.test.com"
+          - Id: CloudFront-PrimaryOrigin
+            DomainName: "www.primary.com"
             CustomOriginConfig:
               OriginProtocolPolicy: match-viewer
+          - Id: CloudFront-DROrigin
+            DomainName: "www.dr.com"
+            CustomOriginConfig:
+              OriginProtocolPolicy: match-viewer
+        OriginGroups:
+            Quantity: 2
+            Items: 
+            - FailoverCriteria: 
+                StatusCodes:
+                  Items:
+                    - 403
+                    - 404
+                    - 500
+                    - 502
+                    - 503
+                    - 504
+                  Quantity: 6
+              Id: CloudFront-OriginGroup
+              Members: 
+                  Quantity: 2
+                  Items:
+                    - OriginId: CloudFront-PrimaryOrigin
+                    - OriginId: CloudFront-DROrigin
         DefaultCacheBehavior:
-          TargetOriginId: CloudFrontRedirectOrigin
-          ForwardedValues:
+          TargetOriginId: CloudFront-PrimaryOrigin
+          ForwardedValues: 
             QueryString: true
           ViewerProtocolPolicy: redirect-to-https
           LambdaFunctionAssociations:
             - EventType: viewer-request
               LambdaFunctionARN: !GetAtt ModifyOriginLambdaVersion.FunctionArn
-
+            - EventType: origin-response
+              LambdaFunctionARN: !GetAtt CustomMetricsLambdaVersion.FunctionArn
+  
   ModifyOriginLambdaEdgeIAMRole:
     Type: AWS::IAM::Role
     Properties:
@@ -97,6 +173,53 @@ Resources:
                   - "ssm:GetParameter"
                   - "ssm:GetParameters"
                 Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/origin/primary-origin"
+
+  ManagementLambdaIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: !Sub "ManagementLambdaParameterAccess-${Stage}"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "ssm:PutParameter"
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/origin/primary-origin"
+
+  CustomMetricsLambdaEdgeIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+                - edgelambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: !Sub "CustomMetricsLambdaEdgeParameterAccess-${Stage}"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "cloudwatch:PutMetricData"
+                Resource:  "*" 
 
   PublishLambdaVersionRole:
     Type: AWS::IAM::Role

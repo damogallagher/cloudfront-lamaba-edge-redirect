@@ -27,3 +27,17 @@ https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ssm-
 
 # Docs on SAM CLI
 https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-cli-command-reference-sam-deploy.html
+
+## Management API
+Sample values are 
+{
+  "origin": "main"
+}
+
+or
+{
+  "origin": "dr"
+}
+
+## Custom Metrics
+https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/publishingMetrics.html

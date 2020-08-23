@@ -9,5 +9,5 @@ region = "us-east-1"
 profile = "personal"
 confirm_changeset = true
 capabilities = "CAPABILITY_NAMED_IAM, CAPABILITY_IAM, CAPABILITY_AUTO_EXPAND"
-parameter_overrides = "Stage=\"dev\" LogLevel=\"warn\" PerformRedirectLambdaFunctionVersion=\"1\" PerformRedirectLambdaName=\"PerformRedirectLambda\""
+parameter_overrides = "Stage=\"dev\" LogLevel=\"warn\" ModifyOriginLambdaFunctionVersion=\"1\" CustomMetricsLambdaFunctionVersion=\"2\" PerformRedirectLambdaName=\"PerformRedirectLambda\""
 
