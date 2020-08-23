@@ -20,4 +20,10 @@ sam deploy --profile personal
 # Docs on CloudFront
 https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-cloudfront-distribution.html
 https://github.com/awslabs/aws-cloudformation-templates/blob/master/aws/solutions/CloudFrontCustomOriginLambda%40Edge/CloudFront.yaml
+https://gist.github.com/jed/56b1f58297d374572bc51c59394c7e7f
 
+# Cloudformation for Parameter Store
+https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ssm-parameter.html
+
+# Docs on SAM CLI
+https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-cli-command-reference-sam-deploy.html

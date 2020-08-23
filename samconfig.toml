@@ -2,12 +2,12 @@ version = 0.1
 [default]
 [default.deploy]
 [default.deploy.parameters]
-stack_name = "CloudFrontRedirect"
-s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-9g06lmb1f066"
-s3_prefix = "CloudFrontRedirect"
+stack_name = "CloudfrontLambdaAtEdge"
+s3_bucket = "aws-sam-cli-dgallagher"
+s3_prefix = "CloudfrontLambdaAtEdge"
 region = "us-east-1"
 profile = "personal"
 confirm_changeset = true
-capabilities = "CAPABILITY_NAMED_IAM"
-parameter_overrides = "Stage=\"\" LogLevel=\"warn\" LambdaFunctionVersion=\"1\" PerformRedirectLambdaName=\"PerformRedirectLambda\""
+capabilities = "CAPABILITY_NAMED_IAM, CAPABILITY_IAM, CAPABILITY_AUTO_EXPAND"
+parameter_overrides = "Stage=\"dev\" LogLevel=\"warn\" PerformRedirectLambdaFunctionVersion=\"1\" PerformRedirectLambdaName=\"PerformRedirectLambda\""
 

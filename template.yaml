@@ -1,83 +1,133 @@
 AWSTemplateFormatVersion: 2010-09-09
 Transform: AWS::Serverless-2016-10-31
-Description: CloudFront Redirect App
+Description: "CloudFront Redirect App"
 
 Parameters:
   Stage:
     Type: String
-  LogLevel:
-    Type: String
-    Default: warn
-  LambdaFunctionVersion:
-    Description: AWS Lambda@Edge function version.
+    Default: dev
+
+  ModifyOriginLambdaFunctionVersion:
+    Description: AWS Lambda@Edge perform redirect lambda function version. Need to increment this number on every update to the cloudformation template.
     Type: String
     Default: "1"
-  PerformRedirectLambdaName:
-    Description: AWS Lambda@Edge function name.
-    Type: String
-    Default: "PerformRedirectLambda"
 
 Globals:
   Function:
     Runtime: nodejs12.x
     Timeout: 60
     MemorySize: 1024
-    Environment:
-      Variables:
-        STAGE: !Ref Stage
-        LOG_LEVEL: !Ref LogLevel
 
 Resources:
-  PerformRedirectLambda:
+  ModifyOriginLambda:
     Type: AWS::Serverless::Function
     Properties:
+      Description: "A lambda@Edge to redirect to the correct service environment by modifing the origin on a viewer request"
+      FunctionName: !Sub "modify-origin-${Stage}"
       CodeUri: ./src
-      Handler: redirect.handler
-      Role: !GetAtt "CloudFrontLambdaEdgeIAMRole.Arn"
-  PerformRedirectLambdaVersion:
+      Handler: modify-origin.handler
+      Runtime: nodejs12.x
+      MemorySize: 128
+      Timeout: 5
+      Role: !GetAtt ModifyOriginLambdaEdgeIAMRole.Arn
+
+  ModifyOriginLambdaVersion:
     Type: "Custom::LambdaVersion"
     Properties:
-      ServiceToken: !GetAtt "PerformRedirectLambda.Arn"
-      FunctionName: !Ref "PerformRedirectLambdaName"
-      LambdaCodeVersion: !Ref "LambdaFunctionVersion"
+      ServiceToken: !GetAtt CreateLambdaEdgeVersionFunction.Arn
+      FunctionName: !Ref ModifyOriginLambda
+      LambdaCodeVersion: !Ref "ModifyOriginLambdaFunctionVersion"
+
+  CreateLambdaEdgeVersionFunction:
+    Type: "AWS::Serverless::Function"
+    DependsOn:
+      - PrimaryOriginParameterStoreVariable
+    Properties:
+      Description: "A custom Lambda@Edge Version function to deploy a new version"
+      FunctionName: !Sub "lambda-edge-version-${Stage}"
+      CodeUri: ./src
+      Handler: create-lambda-version.handler
+      Runtime: nodejs12.x
+      MemorySize: 128
+      Timeout: 30
+      Role: !GetAtt PublishLambdaVersionRole.Arn
+
   CloudFrontDistribution:
     Type: AWS::CloudFront::Distribution
     DependsOn:
-      - PerformRedirectLambda
+      - ModifyOriginLambdaVersion
     Properties:
       DistributionConfig:
+        Enabled: true
         Origins:
-          - DomainName: "http://www.test.com"
-        LambdaFunctionAssociations:
-          - EventType: "viewer-request"
-            IncludeBody: false
-            LambdaFunctionARN: !Ref "PerformRedirectLambdaVersion"
+          - Id: CloudFrontRedirectOrigin
+            DomainName: "www.test.com"
+            CustomOriginConfig:
+              OriginProtocolPolicy: match-viewer
+        DefaultCacheBehavior:
+          TargetOriginId: CloudFrontRedirectOrigin
+          ForwardedValues:
+            QueryString: true
+          ViewerProtocolPolicy: redirect-to-https
+          LambdaFunctionAssociations:
+            - EventType: viewer-request
+              LambdaFunctionARN: !GetAtt ModifyOriginLambdaVersion.FunctionArn
 
-  CloudFrontLambdaEdgeIAMRole:
-    Type: "AWS::IAM::Role"
-    Description: "Lambda Edge IAM Role"
+  ModifyOriginLambdaEdgeIAMRole:
+    Type: AWS::IAM::Role
     Properties:
-      RoleName: "cloudfront-iam-lambda-edge-role"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
-          - Sid: AllowLambdaServiceToAssumeRole
-            Effect: Allow
+          - Effect: Allow
             Principal:
               Service:
-                - edgelambda.amazonaws.com
                 - lambda.amazonaws.com
-            Action:
-              - sts:AssumeRole
+                - edgelambda.amazonaws.com
+            Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-      Path: /
       Policies:
-        - PolicyName: PublishNewLambdaEdgeVersion
+        - PolicyName: !Sub "CloudFrontLambdaEdgeParameterAccess-${Stage}"
           PolicyDocument:
-            Version: 2012-10-17
+            Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action:
-                  - lambda:PublishVersion
+                  - "ssm:GetParameter"
+                  - "ssm:GetParameters"
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/origin/primary-origin"
+
+  PublishLambdaVersionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: PublishVersion
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: lambda:PublishVersion
                 Resource: "*"
+
+  PrimaryOriginParameterStoreVariable:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Value to state whether the primary or dr endpoint is the main endpoint
+      Name: !Sub /origin/primary-origin
+      Type: String
+      Value: main
+Outputs:
+  CloudFrontEndpoint:
+    Value: !GetAtt CloudFrontDistribution.DomainName
+    Export:
+      Name: !Sub "cloudfront-distribution-${Stage}"
