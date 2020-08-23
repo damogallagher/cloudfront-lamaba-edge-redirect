@@ -1,0 +1,83 @@
+AWSTemplateFormatVersion: 2010-09-09
+Transform: AWS::Serverless-2016-10-31
+Description: CloudFront Redirect App
+
+Parameters:
+  Stage:
+    Type: String
+  LogLevel:
+    Type: String
+    Default: warn
+  LambdaFunctionVersion:
+    Description: AWS Lambda@Edge function version.
+    Type: String
+    Default: "1"
+  PerformRedirectLambdaName:
+    Description: AWS Lambda@Edge function name.
+    Type: String
+    Default: "PerformRedirectLambda"
+
+Globals:
+  Function:
+    Runtime: nodejs12.x
+    Timeout: 60
+    MemorySize: 1024
+    Environment:
+      Variables:
+        STAGE: !Ref Stage
+        LOG_LEVEL: !Ref LogLevel
+
+Resources:
+  PerformRedirectLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./src
+      Handler: redirect.handler
+      Role: !GetAtt "CloudFrontLambdaEdgeIAMRole.Arn"
+  PerformRedirectLambdaVersion:
+    Type: "Custom::LambdaVersion"
+    Properties:
+      ServiceToken: !GetAtt "PerformRedirectLambda.Arn"
+      FunctionName: !Ref "PerformRedirectLambdaName"
+      LambdaCodeVersion: !Ref "LambdaFunctionVersion"
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    DependsOn:
+      - PerformRedirectLambda
+    Properties:
+      DistributionConfig:
+        Origins:
+          - DomainName: "http://www.test.com"
+        LambdaFunctionAssociations:
+          - EventType: "viewer-request"
+            IncludeBody: false
+            LambdaFunctionARN: !Ref "PerformRedirectLambdaVersion"
+
+  CloudFrontLambdaEdgeIAMRole:
+    Type: "AWS::IAM::Role"
+    Description: "Lambda Edge IAM Role"
+    Properties:
+      RoleName: "cloudfront-iam-lambda-edge-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowLambdaServiceToAssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - edgelambda.amazonaws.com
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Path: /
+      Policies:
+        - PolicyName: PublishNewLambdaEdgeVersion
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:PublishVersion
+                Resource: "*"

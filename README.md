@@ -1,2 +1,23 @@
-# cloudfront-lamaba-edge-redirect
+# cloudfront-lambda-edge-redirect
 Repo to show performing a redirect from cloudfront using a Lambda @ Edge function
+
+## Useful commands
+### AWS Sam Documentation
+https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/what-is-sam.html
+
+### Build sam template
+sam build   
+
+### Invoking sam function locally with event file
+$ sam local invoke "Ratings" -e event.json
+
+### Deploy sam application using prompts
+sam deploy --guided
+
+### Deploy sam template
+sam deploy --profile personal
+
+# Docs on CloudFront
+https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-cloudfront-distribution.html
+https://github.com/awslabs/aws-cloudformation-templates/blob/master/aws/solutions/CloudFrontCustomOriginLambda%40Edge/CloudFront.yaml
+
