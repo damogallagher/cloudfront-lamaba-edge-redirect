@@ -2,6 +2,7 @@ const { Lambda } = require('aws-sdk')
 const { send, SUCCESS, FAILED } = require('cfn-response')
 const lambda = new Lambda()
 
+// Lambda to create a lambda version - required by CloudFront
 exports.handler = (event, context) => {
     const { RequestType, ResourceProperties: { FunctionName } } = event
 
